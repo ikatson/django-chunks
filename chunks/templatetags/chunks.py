@@ -1,43 +1,57 @@
 from django import template
 from django.db import models
-from django.core.cache import cache
 
 register = template.Library()
 
 Chunk = models.get_model('chunks', 'chunk')
 CACHE_PREFIX = "chunk_"
 
+
+
 def do_get_chunk(parser, token):
     # split_contents() knows not to split quoted strings.
+    """
+    Usage:
+      {% chunk "chunk_name" %} print chunk contents
+      {% chunk "chunk_name" as "var_name" %} places chunk object to "var_name" context variable.
+    """
     tokens = token.split_contents()
-    if len(tokens) < 2 or len(tokens) > 3:
-        raise template.TemplateSyntaxError, "%r tag should have either 2 or 3 arguments" % (tokens[0],)
-    if len(tokens) == 2:
-        tag_name, key = tokens
-        cache_time = 0
-    if len(tokens) == 3:
-        tag_name, key, cache_time = tokens
-    # Check to see if the key is properly double/single quoted
-    if not (key[0] == key[-1] and key[0] in ('"', "'")):
+    if len(tokens) not in (2, 4):
+        raise template.TemplateSyntaxError, "%r tag should have either 2 or 4 arguments" % (tokens[0],)
+    tag_name, key = tokens[:2]
+    if len(tokens) == 4:
+        if tokens[2] != 'as':
+            raise template.TemplateSyntaxError, "invalid syntax of %r tag" % tokens[0]
+        var_name = tokens[3]
+    else:
+        var_name = None
+    def check_quotes(value):
+        """Check to see if the value is properly double/single quoted"""
+        if not (value[0] == value[-1] and value[0] in ('"', "'")):
+            raise ValueError
+        return value[1:-1]
+    try:
+        key = check_quotes(key)
+    except ValueError:
         raise template.TemplateSyntaxError, "%r tag's argument should be in quotes" % tag_name
-    # Send key without quotes and caching time
-    return ChunkNode(key[1:-1], cache_time)
+    return ChunkNode(key, var_name)
+
     
 class ChunkNode(template.Node):
-    def __init__(self, key, cache_time=0):
+
+    def __init__(self, key, var_name):
        self.key = key
-       self.cache_time = cache_time
+       self.var_name = var_name
     
     def render(self, context):
         try:
-            cache_key = CACHE_PREFIX + self.key
-            c = cache.get(cache_key)
-            if c is None:
-                c = Chunk.objects.get(key=self.key)
-                cache.set(cache_key, c, int(self.cache_time))
-            content = c.content
+            chunk = Chunk.objects.get(key=self.key)
         except Chunk.DoesNotExist:
-            content = ''
-        return content
+            return ''
+        if self.var_name:
+            context[self.var_name] = chunk
+            return ''
+        else:
+            return chunk.content
         
 register.tag('chunk', do_get_chunk)
