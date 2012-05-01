@@ -44,10 +44,7 @@ class ChunkNode(template.Node):
        self.var_name = var_name
     
     def render(self, context):
-        try:
-            chunk = Chunk.objects.get(key=self.key)
-        except Chunk.DoesNotExist:
-            chunk = None
+        chunk = Chunk.objects.get_or_create(key=self.key)[0]
         if self.var_name:
             context[self.var_name] = chunk
             return ''
