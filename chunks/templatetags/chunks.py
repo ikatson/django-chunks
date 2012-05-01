@@ -13,7 +13,7 @@ def do_get_chunk(parser, token):
     """
     Usage:
       {% chunk "chunk_name" %} print chunk contents
-      {% chunk "chunk_name" as "var_name" %} places chunk object to "var_name" context variable.
+      {% chunk "chunk_name" as var_name %} places chunk object to "var_name" context variable.
     """
     tokens = token.split_contents()
     if len(tokens) not in (2, 4):
@@ -47,11 +47,11 @@ class ChunkNode(template.Node):
         try:
             chunk = Chunk.objects.get(key=self.key)
         except Chunk.DoesNotExist:
-            return ''
+            chunk = None
         if self.var_name:
             context[self.var_name] = chunk
             return ''
         else:
-            return chunk.content
+            return chunk.content if chunk else ''
         
 register.tag('chunk', do_get_chunk)
